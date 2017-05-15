@@ -1,0 +1,7 @@
+first try running this in your terminal -> pip install --upgrade tensorflow
+if after running this also you get import error (library not found) then folow the following steps
+
+run the following in order
+pip install --upgrade -I setuptools
+pip install --ignore-installed --upgrade https://storage.googleapis.com/tensorflow/windows/cpu/tensorflow-1.0.1-cp35-cp35m-win_amd64.whl
+remember to get the latest build no from the official site or the git repo.
