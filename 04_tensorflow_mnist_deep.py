@@ -1,5 +1,6 @@
 import os
 import tensorflow as tf
+sess = tf.InteractiveSession()
 
 input_data_path = '../MNIST_data/'
 
@@ -45,25 +46,66 @@ y_ = tf.placeholder(tf.float32, [None, 10])
 W = tf.Variable(tf.zeros([784, 10]))
 b = tf.Variable(tf.zeros([10]))
 
-y = tf.matmul(x, W) + b
-cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y))
-# training function and optimizer
-train_step = tf.train.GradientDescentOptimizer(0.1).minimize(cross_entropy)
+# we need to reshape the image, middle two dimensions are image size, last is the no of color channels
+x_image = tf.reshape(x, [-1,28,28,1])
 
-# initialize sessions and variables
-sess = tf.Session()
-init = tf.global_variables_initializer()
-sess.run(init) # reset values to incorrect defaults.
+# first layer
+# convolution happens on images of size 5 X 5, 1 input channel and outputs 32 features
+W_conv1 = weight_variable([5, 5, 1, 32])
+b_conv1 = bias_variable([32])
 
-# loop to run all the steps of the decent
-for _ in range(10000):
-    # feed the data in batches
-    batch_xs, batch_ys = mnist.train.next_batch(100)
-    sess.run(train_step, feed_dict = {x: batch_xs, y_: batch_ys})
 
-is_correct_prediction = tf.equal(tf.argmax(y,1), tf.argmax(y_,1))
-# the above give a boolean array as output, cast it to float
-accuracy = tf.reduce_mean(tf.cast(is_correct_prediction, tf.float32))
+# we will first do a convolution on the image, apply the relu and then take maxpool
+# the size of the resulting "image" is 14 X 14
+h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
+h_pool1 = max_pool_2x2(h_conv1)
 
-print(sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels}))
-# 0.923
+# second layer is similar to the first
+# no of channels is 32 as the output of the first layer has 32 features
+# the output of this layer's "image" matrix is 7 X 7
+W_conv2 = weight_variable([5, 5, 32, 64])
+b_conv2 = bias_variable([64])
+
+h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
+h_pool2 = max_pool_2x2(h_conv2)
+
+# densely connected layer where we "unravel" the last layer's output
+# into a vector and then map it to 1024 features
+W_fc1 = weight_variable([7 * 7 * 64, 1024])
+b_fc1 = bias_variable([1024])
+
+h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*64])
+h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+
+# inbuilt dropout layer in order to prevent overfitting
+# 
+keep_prob = tf.placeholder(tf.float32)
+h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
+
+# final output layer with softmax output
+W_fc2 = weight_variable([1024, 10])
+b_fc2 = bias_variable([10])
+
+y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
+
+# setting up the optimizer
+cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
+train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
+correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
+accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+sess.run(tf.global_variables_initializer()) # reset values to incorrect defaults.
+
+for i in range(20000):
+    batch = mnist.train.next_batch(50)
+    if i%100 == 0:
+      train_accuracy = accuracy.eval(feed_dict={
+          x:batch[0], y_: batch[1], keep_prob: 1.0})
+      print("step %d, training accuracy %g"%(i, train_accuracy))
+    train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+
+print("test accuracy %g"%accuracy.eval(feed_dict={
+    x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
+
+
+
